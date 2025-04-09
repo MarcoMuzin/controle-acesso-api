@@ -1,47 +1,84 @@
 from flask import Flask, request, jsonify
 import json
-import datetime
+import os
+from datetime import datetime, timedelta
 
-app = Flask(__name__)  # ← ESSA LINHA É FUNDAMENTAL
+app = Flask(__name__)
+ARQUIVO_USUARIOS = "users.json"
 
-TRIAL_DIAS = 3
-
-def carregar_dados():
-    with open("users.json", "r") as f:
+def carregar_usuarios():
+    if not os.path.exists(ARQUIVO_USUARIOS):
+        return {"usuarios": []}
+    with open(ARQUIVO_USUARIOS, "r") as f:
         return json.load(f)
 
-@app.route("/verificar", methods=["GET"])
-def verificar():
-    user_id = request.args.get("id")
+def salvar_usuarios(dados):
+    with open(ARQUIVO_USUARIOS, "w") as f:
+        json.dump(dados, f, indent=4)
+
+@app.route("/registrar", methods=["POST"])
+def registrar_id():
+    data = request.get_json()
+    user_id = data.get("id")
     if not user_id:
-        return jsonify({"status": "erro", "mensagem": "ID não fornecido"}), 400
+        return jsonify({"erro": "ID não fornecido"}), 400
 
-    dados = carregar_dados()["usuarios"]
+    usuarios = carregar_usuarios()["usuarios"]
+    for usuario in usuarios:
+        if usuario.get("id") == user_id:
+            return jsonify({"mensagem": "ID já registrado"}), 200
 
-    if user_id not in dados:
-        return jsonify({"status": "nao_encontrado"}), 404
+    # Registrar ID vazio se ainda não foi preenchido
+    for usuario in usuarios:
+        if not usuario.get("id"):
+            usuario["id"] = user_id
+            salvar_usuarios({"usuarios": usuarios})
+            return jsonify({"mensagem": "ID registrado com sucesso"}), 200
 
-    usuario = dados[user_id]
-    status = usuario["status"]
+    return jsonify({"erro": "Limite de usuários atingido"}), 403
 
-    if status == "bloqueado":
-        return jsonify({"status": "bloqueado"})
+@app.route("/verificar", methods=["GET"])
+def verificar_acesso():
+    user_id = request.args.get("id")
+    login = request.args.get("login")
+    senha = request.args.get("senha")
 
-    elif status == "liberado":
-        return jsonify({"status": "liberado"})
+    if not all([user_id, login, senha]):
+        return jsonify({"erro": "Dados incompletos"}), 400
 
-    elif status == "trial":
-        inicio_trial = datetime.datetime.strptime(usuario["inicio_trial"], "%Y-%m-%d").date()
-        hoje = datetime.date.today()
-        dias_usados = (hoje - inicio_trial).days
+    usuarios = carregar_usuarios()["usuarios"]
 
-        if dias_usados <= TRIAL_DIAS:
-            return jsonify({"status": "trial", "dias_restantes": TRIAL_DIAS - dias_usados})
-        else:
-            return jsonify({"status": "trial_expirado"})
+    for usuario in usuarios:
+        if usuario.get("id") == user_id and usuario.get("login") == login and usuario.get("senha") == senha:
+            status = usuario.get("status")
 
-    return jsonify({"status": "erro_desconhecido"})
+            if status == "liberado":
+                return jsonify({"status": "liberado"})
 
-# Roda localmente, se quiser testar com python app.py
+            elif status == "trial":
+                data_registro = usuario.get("data_registro")
+                dias_trial = usuario.get("dias_trial", 0)
+
+                if not data_registro:
+                    # Registrar data atual como início do trial
+                    usuario["data_registro"] = datetime.now().strftime("%Y-%m-%d")
+                    salvar_usuarios({"usuarios": usuarios})
+                    return jsonify({"status": "trial", "dias_restantes": dias_trial})
+
+                else:
+                    inicio = datetime.strptime(data_registro, "%Y-%m-%d")
+                    dias_passados = (datetime.now() - inicio).days
+                    dias_restantes = max(0, dias_trial - dias_passados)
+
+                    if dias_restantes > 0:
+                        return jsonify({"status": "trial", "dias_restantes": dias_restantes})
+                    else:
+                        return jsonify({"status": "bloqueado"})
+
+            else:
+                return jsonify({"status": "bloqueado"})
+
+    return jsonify({"erro": "Credenciais inválidas ou não encontradas"}), 403
+
 if __name__ == "__main__":
     app.run(debug=True)
