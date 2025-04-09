@@ -11,6 +11,7 @@ import time
 import cv2
 import os
 import pygame
+import numpy as np  # Correção para uso com screenshots
 
 IMAGENS_PASTA = "imagens"
 AUDIOS_PASTA = "audios"
@@ -28,14 +29,19 @@ def obter_id_maquina():
 
 def enviar_id_para_api():
     user_id = obter_id_maquina()
-    try:
-        resposta = requests.post(f"{API_URL}/registrar", json={"id": user_id})
-        if resposta.status_code == 200:
-            print("✅ ID enviado com sucesso.")
-        else:
-            print("⚠️ Falha ao registrar ID.")
-    except Exception as e:
-        print(f"❌ Erro ao enviar ID: {e}")
+    tentativas = 3
+    for i in range(tentativas):
+        try:
+            resposta = requests.post(f"{API_URL}/registrar", json={"id": user_id})
+            if resposta.status_code == 200:
+                print("✅ ID enviado com sucesso.")
+                return
+            else:
+                print(f"⚠️ Tentativa {i+1}: Falha ao registrar ID. Status: {resposta.status_code}")
+        except Exception as e:
+            print(f"❌ Tentativa {i+1}: Erro ao enviar ID: {e}")
+        time.sleep(3)
+    print("❌ Todas as tentativas de registro falharam.")
 
 def verificar_acesso_remoto(login, senha):
     user_id = obter_id_maquina()
@@ -77,7 +83,8 @@ def procurar_item(item):
     if imagem is None:
         return
     screenshot = pyautogui.screenshot()
-    screenshot = cv2.cvtColor(cv2.array(screenshot), cv2.COLOR_RGB2BGR)
+    screenshot = np.array(screenshot)
+    screenshot = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
     resultado = cv2.matchTemplate(screenshot, imagem, cv2.TM_CCOEFF_NORMED)
     _, max_val, _, _ = cv2.minMaxLoc(resultado)
     if max_val > 0.8:
@@ -152,13 +159,11 @@ def criar_interface():
 
     janela_principal.mainloop()
 
-# === EXECUÇÃO PROTEGIDA COM ENVIO AUTOMÁTICO DE ID E LOGIN ===
+# === EXECUÇÃO PRINCIPAL ===
 if __name__ == "__main__":
     enviar_id_para_api()
-
     login = input("🔐 Digite seu login: ")
     senha = input("🔐 Digite sua senha: ")
-
     if verificar_acesso_remoto(login, senha):
         criar_interface()
     else:
