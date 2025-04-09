@@ -23,12 +23,18 @@ def registrar_id():
     if not user_id:
         return jsonify({"erro": "ID não fornecido"}), 400
 
-    usuarios = carregar_usuarios()["usuarios"]
+    dados = carregar_usuarios()
+    usuarios = dados.get("usuarios", [])
+
+    # DEBUG: Verificando usuários carregados
+    print("🔍 Usuários carregados:", usuarios)
+
+    # Verifica se o ID já está registrado
     for usuario in usuarios:
         if usuario.get("id") == user_id:
             return jsonify({"mensagem": "ID já registrado"}), 200
 
-    # Registrar ID vazio se ainda não foi preenchido
+    # Encontra o primeiro usuário com ID vazio e registra
     for usuario in usuarios:
         if not usuario.get("id"):
             usuario["id"] = user_id
@@ -46,7 +52,8 @@ def verificar_acesso():
     if not all([user_id, login, senha]):
         return jsonify({"erro": "Dados incompletos"}), 400
 
-    usuarios = carregar_usuarios()["usuarios"]
+    dados = carregar_usuarios()
+    usuarios = dados.get("usuarios", [])
 
     for usuario in usuarios:
         if usuario.get("id") == user_id and usuario.get("login") == login and usuario.get("senha") == senha:
@@ -60,7 +67,6 @@ def verificar_acesso():
                 dias_trial = usuario.get("dias_trial", 0)
 
                 if not data_registro:
-                    # Registrar data atual como início do trial
                     usuario["data_registro"] = datetime.now().strftime("%Y-%m-%d")
                     salvar_usuarios({"usuarios": usuarios})
                     return jsonify({"status": "trial", "dias_restantes": dias_trial})

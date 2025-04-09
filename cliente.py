@@ -3,7 +3,7 @@ import uuid
 import sys
 from datetime import datetime
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, simpledialog
 from PIL import Image, ImageTk
 import pyautogui
 import threading
@@ -12,9 +12,10 @@ import cv2
 import os
 import pygame
 
-# Configurações
 IMAGENS_PASTA = "imagens"
 AUDIOS_PASTA = "audios"
+
+API_URL = "https://controle-acesso-api.onrender.com"
 
 itens_ferir = ["Bless", "Claw", "Splinter"]
 joias = ["Gemstone", "Jewel"]
@@ -25,15 +26,26 @@ monitorando = False
 def obter_id_maquina():
     return str(uuid.getnode())
 
-def verificar_acesso_remoto():
+def enviar_id_para_api():
     user_id = obter_id_maquina()
     try:
-        resposta = requests.get(f"https://controle-acesso-api.onrender.com/verificar?user_id={user_id}")
+        resposta = requests.post(f"{API_URL}/registrar", json={"id": user_id})
+        if resposta.status_code == 200:
+            print("✅ ID enviado com sucesso.")
+        else:
+            print("⚠️ Falha ao registrar ID.")
+    except Exception as e:
+        print(f"❌ Erro ao enviar ID: {e}")
+
+def verificar_acesso_remoto(login, senha):
+    user_id = obter_id_maquina()
+    try:
+        resposta = requests.get(f"{API_URL}/verificar", params={"id": user_id, "login": login, "senha": senha})
         if resposta.status_code == 200:
             dados = resposta.json()
             status = dados.get("status")
             if status == "liberado":
-                print("✅ Acesso liberado remotamente.")
+                print("✅ Acesso liberado.")
                 return True
             elif status == "trial":
                 dias_restantes = dados.get("dias_restantes", 0)
@@ -43,12 +55,11 @@ def verificar_acesso_remoto():
                 else:
                     print("❌ Trial expirado.")
             else:
-                print("⛔ Acesso bloqueado remotamente.")
+                print("⛔ Acesso bloqueado.")
         else:
-            print("⚠️ Erro na verificação remota.")
+            print("⚠️ Erro ao verificar acesso remoto.")
     except Exception as e:
-        print(f"❌ Erro de conexão com a API: {e}")
-    
+        print(f"❌ Erro de conexão: {e}")
     return False
 
 def tocar_som(item):
@@ -62,16 +73,13 @@ def procurar_item(item):
     caminho_imagem = os.path.join(IMAGENS_PASTA, f"{item}.png")
     if not os.path.exists(caminho_imagem):
         return
-
     imagem = cv2.imread(caminho_imagem)
     if imagem is None:
         return
-
     screenshot = pyautogui.screenshot()
     screenshot = cv2.cvtColor(cv2.array(screenshot), cv2.COLOR_RGB2BGR)
     resultado = cv2.matchTemplate(screenshot, imagem, cv2.TM_CCOEFF_NORMED)
     _, max_val, _, _ = cv2.minMaxLoc(resultado)
-
     if max_val > 0.8:
         print(f"{item} detectado!")
         tocar_som(item)
@@ -103,7 +111,6 @@ def criar_interface():
     janela_principal.title("Monitoramento de Itens - Mu C.A Brasil")
     janela_principal.geometry("600x400")
     janela_principal.configure(bg="#0d1117")
-
     try:
         imagem_fundo = Image.open("imagens/logo.png")
         imagem_fundo = imagem_fundo.resize((150, 150))
@@ -145,9 +152,14 @@ def criar_interface():
 
     janela_principal.mainloop()
 
-# EXECUÇÃO PROTEGIDA
+# === EXECUÇÃO PROTEGIDA COM ENVIO AUTOMÁTICO DE ID E LOGIN ===
 if __name__ == "__main__":
-    if verificar_acesso_remoto():
+    enviar_id_para_api()
+
+    login = input("🔐 Digite seu login: ")
+    senha = input("🔐 Digite sua senha: ")
+
+    if verificar_acesso_remoto(login, senha):
         criar_interface()
     else:
         print("⛔ Acesso negado. Encerrando programa.")
