@@ -1,0 +1,7 @@
+# Ignorar arquivos e pastas de build
+dist/
+build/
+*.exe
+*.bak
+*.pyc
+__pycache__/
