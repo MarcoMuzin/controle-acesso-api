@@ -1,147 +1,154 @@
-import base64
-import os
+import requests
+import uuid
 import sys
+from datetime import datetime
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk
+from PIL import Image, ImageTk
+import pyautogui
 import threading
 import time
-import datetime
-import pyautogui
 import cv2
-import numpy as np
-import playsound
+import os
+import pygame
 
-# Configuração de login
-USUARIO_CORRETO = "admin"
-SENHA_CORRETA = "1234"
+# Configurações
+IMAGENS_PASTA = "imagens"
+AUDIOS_PASTA = "audios"
 
-# Arquivo de registro encriptado
-DIAS_LIMITE = 30
-DATA_INICIO_ARQUIVO = "data_inicio.txt"
+itens_ferir = ["Bless", "Claw", "Splinter"]
+joias = ["Gemstone", "Jewel"]
 
-# Variável global para controle de monitoramento
+selecionados = {}
 monitorando = False
 
-def resource_path(relative_path):
-    """Retorna o caminho absoluto do recurso, compatível com PyInstaller"""
-    if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.join(os.path.abspath("."), relative_path)
+def obter_id_maquina():
+    return str(uuid.getnode())
 
-# Itens monitorados
-itens_monitorados = {
-    "Gemstone": {"imagem": resource_path("img_Gemstone.jpg"), "som": resource_path("Gemstone_SOM.mp3"), "ativo": None},
-    "Jewel": {"imagem": resource_path("img_jewel.jpg"), "som": resource_path("Jewel_SOM.mp3"), "ativo": None},
-    "Bless": {"imagem": resource_path("img_Bless.jpg"), "som": resource_path("Todos_SOM.mp3"), "ativo": None},
-    "Claw": {"imagem": resource_path("Img_Claw.jpg"), "som": resource_path("Todos_SOM.mp3"), "ativo": None},
-    "Splinter": {"imagem": resource_path("img_Splinter.jpg"), "som": resource_path("Todos_SOM.mp3"), "ativo": None}
-}
-
-# Proteção do tempo de uso
-def verificar_tempo_restante():
-    if not os.path.exists(DATA_INICIO_ARQUIVO):
-        data_inicio = datetime.date.today().isoformat()
-        with open(DATA_INICIO_ARQUIVO, "w") as f:
-            f.write(base64.b64encode(data_inicio.encode()).decode())
-    else:
-        with open(DATA_INICIO_ARQUIVO, "r") as f:
-            try:
-                data_inicio = base64.b64decode(f.read().strip()).decode()
-            except Exception:
-                return 0
+def verificar_acesso_remoto():
+    user_id = obter_id_maquina()
+    try:
+        resposta = requests.get(f"https://controle-acesso-api.onrender.com/verificar?user_id={user_id}")
+        if resposta.status_code == 200:
+            dados = resposta.json()
+            status = dados.get("status")
+            if status == "liberado":
+                print("✅ Acesso liberado remotamente.")
+                return True
+            elif status == "trial":
+                dias_restantes = dados.get("dias_restantes", 0)
+                if dias_restantes > 0:
+                    print(f"🕒 Trial ativo. Dias restantes: {dias_restantes}")
+                    return True
+                else:
+                    print("❌ Trial expirado.")
+            else:
+                print("⛔ Acesso bloqueado remotamente.")
+        else:
+            print("⚠️ Erro na verificação remota.")
+    except Exception as e:
+        print(f"❌ Erro de conexão com a API: {e}")
     
-    data_inicio = datetime.datetime.strptime(data_inicio, "%Y-%m-%d").date()
-    dias_passados = (datetime.date.today() - data_inicio).days
-    return max(0, DIAS_LIMITE - dias_passados)
+    return False
 
-# Monitoramento
-def tocar_som(audio):
-    if os.path.exists(audio):
-        threading.Thread(target=playsound.playsound, args=(audio,), daemon=True).start()
-    else:
-        print(f"Arquivo de áudio não encontrado: {audio}")
+def tocar_som(item):
+    caminho_audio = os.path.join(AUDIOS_PASTA, f"{item}.mp3")
+    if os.path.exists(caminho_audio):
+        pygame.mixer.init()
+        pygame.mixer.music.load(caminho_audio)
+        pygame.mixer.music.play()
 
-def monitorar_tela():
-    global monitorando, status_label
-    status_label.config(text="Código Rodando", fg="green")
+def procurar_item(item):
+    caminho_imagem = os.path.join(IMAGENS_PASTA, f"{item}.png")
+    if not os.path.exists(caminho_imagem):
+        return
+
+    imagem = cv2.imread(caminho_imagem)
+    if imagem is None:
+        return
+
+    screenshot = pyautogui.screenshot()
+    screenshot = cv2.cvtColor(cv2.array(screenshot), cv2.COLOR_RGB2BGR)
+    resultado = cv2.matchTemplate(screenshot, imagem, cv2.TM_CCOEFF_NORMED)
+    _, max_val, _, _ = cv2.minMaxLoc(resultado)
+
+    if max_val > 0.8:
+        print(f"{item} detectado!")
+        tocar_som(item)
+
+def monitorar():
+    global monitorando
     while monitorando:
-        tela = np.array(pyautogui.screenshot())
-        tela = cv2.cvtColor(tela, cv2.COLOR_RGB2GRAY)
-        
-        for nome, dados in itens_monitorados.items():
-            if dados["ativo"].get():
-                imagem = cv2.imread(dados["imagem"], cv2.IMREAD_GRAYSCALE)
-                if imagem is not None:
-                    result = cv2.matchTemplate(tela, imagem, cv2.TM_CCOEFF_NORMED)
-                    _, max_val, _, _ = cv2.minMaxLoc(result)
-                    if max_val > 0.87:
-                        tocar_som(dados["som"])
+        for item, var in selecionados.items():
+            if var.get():
+                procurar_item(item)
         time.sleep(1)
-    status_label.config(text="Código Parado", fg="red")
 
 def iniciar_monitoramento():
     global monitorando
-    if not monitorando:
-        monitorando = True
-        threading.Thread(target=monitorar_tela, daemon=True).start()
+    monitorando = True
+    threading.Thread(target=monitorar, daemon=True).start()
 
 def parar_monitoramento():
     global monitorando
     monitorando = False
 
-def criar_interface():
-    dias_restantes = verificar_tempo_restante()
-    if dias_restantes <= 0:
-        messagebox.showerror("Erro", "Seu período de teste expirou!")
-        sys.exit()
-    
-    global status_label
-    janela = tk.Tk()
-    janela.title("Monitoramento de Itens")
-    janela.geometry("400x350")  # Aumentado o tamanho da interface
-    
-    for nome, dados in itens_monitorados.items():
-        dados["ativo"] = tk.BooleanVar(janela)
-    
-    frame_itens = tk.Frame(janela)
-    frame_itens.pack(pady=10)
-    
-    for nome, dados in itens_monitorados.items():
-        tk.Checkbutton(frame_itens, text=nome, variable=dados["ativo"], fg="blue").pack(anchor='w')
-    
-    frame_botoes = tk.Frame(janela)
-    frame_botoes.pack(pady=10)
-    
-    tk.Button(frame_botoes, text="Iniciar", command=iniciar_monitoramento, bg="green", fg="white").pack(side=tk.LEFT, padx=5)
-    tk.Button(frame_botoes, text="Parar", command=parar_monitoramento, bg="gray", fg="white").pack(side=tk.LEFT, padx=5)
-    tk.Button(frame_botoes, text="Sair", command=janela.quit, bg="red", fg="white").pack(side=tk.LEFT, padx=5)
-    
-    status_label = tk.Label(janela, text="Código Parado", fg="red")
-    status_label.pack(pady=5)
-    
-    label_tempo = tk.Label(janela, text=f"Dias restantes: {dias_restantes}", fg="red", font=("Arial", 12, "bold"))
-    label_tempo.place(x=10, y=10)
-    
-    janela.mainloop()
+def sair():
+    parar_monitoramento()
+    janela_principal.destroy()
 
-def verificar_login():
-    usuario = entrada_usuario.get()
-    senha = entrada_senha.get()
-    if usuario == USUARIO_CORRETO and senha == SENHA_CORRETA:
-        login_janela.destroy()
+def criar_interface():
+    global janela_principal
+    janela_principal = tk.Tk()
+    janela_principal.title("Monitoramento de Itens - Mu C.A Brasil")
+    janela_principal.geometry("600x400")
+    janela_principal.configure(bg="#0d1117")
+
+    try:
+        imagem_fundo = Image.open("imagens/logo.png")
+        imagem_fundo = imagem_fundo.resize((150, 150))
+        imagem_fundo = ImageTk.PhotoImage(imagem_fundo)
+        label_fundo = tk.Label(janela_principal, image=imagem_fundo, bg="#0d1117")
+        label_fundo.image = imagem_fundo
+        label_fundo.place(relx=0.5, rely=0.08, anchor="n")
+    except:
+        pass
+
+    estilo = ttk.Style()
+    estilo.theme_use("clam")
+    estilo.configure("TNotebook", background="#0d1117", borderwidth=0)
+    estilo.configure("TNotebook.Tab", background="#161b22", foreground="lime", padding=10)
+    estilo.map("TNotebook.Tab", background=[("selected", "#238636")])
+
+    notebook = ttk.Notebook(janela_principal)
+    aba_monitoramento = ttk.Frame(notebook, style="TNotebook")
+    notebook.add(aba_monitoramento, text="Monitoramento")
+    notebook.pack(expand=True, fill="both", padx=10, pady=10)
+
+    def criar_subaba(frame_pai, titulo, itens):
+        frame = ttk.Labelframe(frame_pai, text=titulo, padding=10)
+        frame.pack(fill="x", padx=5, pady=5)
+        for item in itens:
+            var = tk.BooleanVar()
+            chk = tk.Checkbutton(frame, text=item, variable=var, bg="#0d1117", fg="skyblue", selectcolor="#0d1117", activebackground="#0d1117")
+            chk.pack(anchor="w")
+            selecionados[item] = var
+
+    criar_subaba(aba_monitoramento, "Itens Ferir", itens_ferir)
+    criar_subaba(aba_monitoramento, "Joias", joias)
+
+    botoes_frame = tk.Frame(janela_principal, bg="#0d1117")
+    botoes_frame.pack(pady=10)
+    tk.Button(botoes_frame, text="Iniciar", command=iniciar_monitoramento, bg="#238636", fg="white", width=10).pack(side="left", padx=5)
+    tk.Button(botoes_frame, text="Parar", command=parar_monitoramento, bg="#da3633", fg="white", width=10).pack(side="left", padx=5)
+    tk.Button(botoes_frame, text="Sair", command=sair, bg="#484f58", fg="white", width=10).pack(side="left", padx=5)
+
+    janela_principal.mainloop()
+
+# EXECUÇÃO PROTEGIDA
+if __name__ == "__main__":
+    if verificar_acesso_remoto():
         criar_interface()
     else:
-        messagebox.showerror("Erro", "Usuário ou senha incorretos")
-
-# Criando tela de login
-login_janela = tk.Tk()
-login_janela.title("Login")
-login_janela.geometry("300x150")
-
-entrada_usuario = tk.Entry(login_janela)
-entrada_usuario.pack()
-entrada_senha = tk.Entry(login_janela, show="*")
-entrada_senha.pack()
-
-tk.Button(login_janela, text="Entrar", command=verificar_login).pack()
-login_janela.mainloop()
+        print("⛔ Acesso negado. Encerrando programa.")
+        sys.exit()

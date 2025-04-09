@@ -1,0 +1,16 @@
+{
+  "usuarios": [
+    {
+      "id": "user1",
+      "status": "ativo",
+      "data_inicio": "2025-04-01",
+      "data_fim": "2025-04-30"
+    },
+    {
+      "id": "user2",
+      "status": "bloqueado",
+      "data_inicio": "2025-04-02",
+      "data_fim": "2025-05-02"
+    }
+  ]
+}
