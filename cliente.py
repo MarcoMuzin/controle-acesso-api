@@ -3,7 +3,7 @@ import uuid
 import sys
 from datetime import datetime
 import tkinter as tk
-from tkinter import ttk, simpledialog
+from tkinter import ttk
 from PIL import Image, ImageTk
 import pyautogui
 import threading
@@ -11,16 +11,14 @@ import time
 import cv2
 import os
 import pygame
-import numpy as np  # Correção para uso com screenshots
+import numpy as np
 
 IMAGENS_PASTA = "imagens"
 AUDIOS_PASTA = "audios"
-
 API_URL = "https://controle-acesso-api.onrender.com"
 
 itens_ferir = ["Bless", "Claw", "Splinter"]
 joias = ["Gemstone", "Jewel"]
-
 selecionados = {}
 monitorando = False
 
@@ -29,17 +27,19 @@ def obter_id_maquina():
 
 def enviar_id_para_api():
     user_id = obter_id_maquina()
-    tentativas = 3
-    for i in range(tentativas):
+    for i in range(3):
         try:
             resposta = requests.post(f"{API_URL}/registrar", json={"id": user_id})
             if resposta.status_code == 200:
-                print("✅ ID enviado com sucesso.")
+                print("✅ ID registrado com sucesso.")
+                return
+            elif resposta.status_code == 403:
+                print("⚠️ Limite de usuários atingido. Entre em contato com o suporte.")
                 return
             else:
-                print(f"⚠️ Tentativa {i+1}: Falha ao registrar ID. Status: {resposta.status_code}")
+                print(f"⚠️ Tentativa {i+1} falhou. Status: {resposta.status_code}")
         except Exception as e:
-            print(f"❌ Tentativa {i+1}: Erro ao enviar ID: {e}")
+            print(f"❌ Tentativa {i+1} erro: {e}")
         time.sleep(3)
     print("❌ Todas as tentativas de registro falharam.")
 
@@ -62,10 +62,12 @@ def verificar_acesso_remoto(login, senha):
                     print("❌ Trial expirado.")
             else:
                 print("⛔ Acesso bloqueado.")
+        elif resposta.status_code == 403:
+            print("❌ Credenciais inválidas ou acesso negado.")
         else:
-            print("⚠️ Erro ao verificar acesso remoto.")
+            print(f"⚠️ Erro inesperado: {resposta.status_code}")
     except Exception as e:
-        print(f"❌ Erro de conexão: {e}")
+        print(f"❌ Erro de conexão com a API: {e}")
     return False
 
 def tocar_som(item):
@@ -80,15 +82,12 @@ def procurar_item(item):
     if not os.path.exists(caminho_imagem):
         return
     imagem = cv2.imread(caminho_imagem)
-    if imagem is None:
-        return
     screenshot = pyautogui.screenshot()
-    screenshot = np.array(screenshot)
-    screenshot = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
+    screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
     resultado = cv2.matchTemplate(screenshot, imagem, cv2.TM_CCOEFF_NORMED)
     _, max_val, _, _ = cv2.minMaxLoc(resultado)
     if max_val > 0.8:
-        print(f"{item} detectado!")
+        print(f"🎯 {item} detectado!")
         tocar_som(item)
 
 def monitorar():
@@ -118,13 +117,12 @@ def criar_interface():
     janela_principal.title("Monitoramento de Itens - Mu C.A Brasil")
     janela_principal.geometry("600x400")
     janela_principal.configure(bg="#0d1117")
+
     try:
-        imagem_fundo = Image.open("imagens/logo.png")
-        imagem_fundo = imagem_fundo.resize((150, 150))
-        imagem_fundo = ImageTk.PhotoImage(imagem_fundo)
-        label_fundo = tk.Label(janela_principal, image=imagem_fundo, bg="#0d1117")
-        label_fundo.image = imagem_fundo
-        label_fundo.place(relx=0.5, rely=0.08, anchor="n")
+        imagem_fundo = Image.open("imagens/logo.png").resize((150, 150))
+        imagem_tk = ImageTk.PhotoImage(imagem_fundo)
+        tk.Label(janela_principal, image=imagem_tk, bg="#0d1117").place(relx=0.5, rely=0.08, anchor="n")
+        janela_principal.image = imagem_tk
     except:
         pass
 
@@ -135,31 +133,31 @@ def criar_interface():
     estilo.map("TNotebook.Tab", background=[("selected", "#238636")])
 
     notebook = ttk.Notebook(janela_principal)
-    aba_monitoramento = ttk.Frame(notebook, style="TNotebook")
+    aba_monitoramento = ttk.Frame(notebook)
     notebook.add(aba_monitoramento, text="Monitoramento")
     notebook.pack(expand=True, fill="both", padx=10, pady=10)
 
-    def criar_subaba(frame_pai, titulo, itens):
-        frame = ttk.Labelframe(frame_pai, text=titulo, padding=10)
+    def criar_subaba(pai, titulo, itens):
+        frame = ttk.Labelframe(pai, text=titulo, padding=10)
         frame.pack(fill="x", padx=5, pady=5)
         for item in itens:
             var = tk.BooleanVar()
-            chk = tk.Checkbutton(frame, text=item, variable=var, bg="#0d1117", fg="skyblue", selectcolor="#0d1117", activebackground="#0d1117")
+            chk = tk.Checkbutton(frame, text=item, variable=var, bg="#0d1117", fg="skyblue", selectcolor="#0d1117")
             chk.pack(anchor="w")
             selecionados[item] = var
 
     criar_subaba(aba_monitoramento, "Itens Ferir", itens_ferir)
     criar_subaba(aba_monitoramento, "Joias", joias)
 
-    botoes_frame = tk.Frame(janela_principal, bg="#0d1117")
-    botoes_frame.pack(pady=10)
-    tk.Button(botoes_frame, text="Iniciar", command=iniciar_monitoramento, bg="#238636", fg="white", width=10).pack(side="left", padx=5)
-    tk.Button(botoes_frame, text="Parar", command=parar_monitoramento, bg="#da3633", fg="white", width=10).pack(side="left", padx=5)
-    tk.Button(botoes_frame, text="Sair", command=sair, bg="#484f58", fg="white", width=10).pack(side="left", padx=5)
+    frame_botoes = tk.Frame(janela_principal, bg="#0d1117")
+    frame_botoes.pack(pady=10)
+    tk.Button(frame_botoes, text="Iniciar", command=iniciar_monitoramento, bg="#238636", fg="white", width=10).pack(side="left", padx=5)
+    tk.Button(frame_botoes, text="Parar", command=parar_monitoramento, bg="#da3633", fg="white", width=10).pack(side="left", padx=5)
+    tk.Button(frame_botoes, text="Sair", command=sair, bg="#484f58", fg="white", width=10).pack(side="left", padx=5)
 
     janela_principal.mainloop()
 
-# === EXECUÇÃO PRINCIPAL ===
+# Execução principal
 if __name__ == "__main__":
     enviar_id_para_api()
     login = input("🔐 Digite seu login: ")
@@ -167,5 +165,5 @@ if __name__ == "__main__":
     if verificar_acesso_remoto(login, senha):
         criar_interface()
     else:
-        print("⛔ Acesso negado. Encerrando programa.")
+        print("⛔ Acesso negado. Encerrando.")
         sys.exit()
