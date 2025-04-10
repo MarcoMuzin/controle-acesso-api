@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 app = Flask(__name__)
 ARQUIVO_USUARIOS = "users.json"
@@ -13,8 +13,8 @@ def carregar_usuarios():
         return json.load(f)
 
 def salvar_usuarios(dados):
-    with open(ARQUIVO_USUARIOS, "w") as f:
-        json.dump(dados, f, indent=4)
+    with open(ARQUIVO_USUARIOS, "w", encoding="utf-8") as f:
+        json.dump(dados, f, indent=4, ensure_ascii=False)
 
 @app.route("/registrar", methods=["POST"])
 def registrar_id():
@@ -26,15 +26,12 @@ def registrar_id():
     dados = carregar_usuarios()
     usuarios = dados.get("usuarios", [])
 
-    # DEBUG: Verificando usuários carregados
     print("🔍 Usuários carregados:", usuarios)
 
-    # Verifica se o ID já está registrado
     for usuario in usuarios:
         if usuario.get("id") == user_id:
             return jsonify({"mensagem": "ID já registrado"}), 200
 
-    # Encontra o primeiro usuário com ID vazio e registra
     for usuario in usuarios:
         if not usuario.get("id"):
             usuario["id"] = user_id
@@ -85,6 +82,10 @@ def verificar_acesso():
                 return jsonify({"status": "bloqueado"})
 
     return jsonify({"erro": "Credenciais inválidas ou não encontradas"}), 403
+
+@app.route("/saúdez")  # rota para health check da Render
+def saudez():
+    return "OK", 200
 
 if __name__ == "__main__":
     app.run(debug=True)
