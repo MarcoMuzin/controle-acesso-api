@@ -7,10 +7,11 @@ app = Flask(__name__)
 ARQUIVO_USUARIOS = "users.json"
 LIMITE_USUARIOS = 5  # Definindo um limite máximo de usuários
 
+# Funções de carregamento e salvamento de usuários
 def carregar_usuarios():
     """Carrega os dados dos usuários do arquivo JSON."""
     if not os.path.exists(ARQUIVO_USUARIOS):
-        return {"usuarios": []}
+        return {}
     with open(ARQUIVO_USUARIOS, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -32,22 +33,18 @@ def registrar_id():
         return jsonify({"erro": "ID não fornecido"}), 400
 
     dados = carregar_usuarios()
-    usuarios = dados.get("usuarios", [])
-
-    print("🔍 Usuários carregados:", usuarios)
 
     # Verificando se o ID já está registrado
-    for usuario in usuarios:
-        if usuario.get("id") == user_id:
-            return jsonify({"mensagem": "ID já registrado"}), 200
+    if user_id in dados:
+        return jsonify({"mensagem": "ID já registrado"}), 200
 
     # Verificando se não ultrapassamos o limite de usuários
-    if len(usuarios) >= LIMITE_USUARIOS:
+    if len(dados) >= LIMITE_USUARIOS:
         return jsonify({"erro": "Limite de usuários atingido"}), 403
 
     # Registrando o novo usuário
-    usuarios.append({"id": user_id})
-    salvar_usuarios({"usuarios": usuarios})
+    dados[user_id] = {"id": user_id}
+    salvar_usuarios(dados)
 
     return jsonify({"mensagem": "ID registrado com sucesso"}), 200
 
@@ -61,36 +58,36 @@ def verificar_acesso():
         return jsonify({"erro": "Dados incompletos"}), 400
 
     dados = carregar_usuarios()
-    usuarios = dados.get("usuarios", [])
 
-    for usuario in usuarios:
-        if usuario.get("id") == user_id and usuario.get("login") == login and usuario.get("senha") == senha:
-            status = usuario.get("status")
+    usuario = dados.get(user_id)
 
-            if status == "liberado":
-                return jsonify({"status": "liberado"})
+    if usuario and usuario.get("login") == login and usuario.get("senha") == senha:
+        status = usuario.get("status")
 
-            elif status == "trial":
-                data_registro = usuario.get("data_registro")
-                dias_trial = usuario.get("dias_trial", 0)
+        if status == "liberado":
+            return jsonify({"status": "liberado"})
 
-                if not data_registro:
-                    usuario["data_registro"] = datetime.now().strftime("%Y-%m-%d")
-                    salvar_usuarios({"usuarios": usuarios})
-                    return jsonify({"status": "trial", "dias_restantes": dias_trial})
+        elif status == "trial":
+            data_registro = usuario.get("data_registro")
+            dias_trial = usuario.get("dias_trial", 0)
 
-                else:
-                    inicio = datetime.strptime(data_registro, "%Y-%m-%d")
-                    dias_passados = (datetime.now() - inicio).days
-                    dias_restantes = max(0, dias_trial - dias_passados)
-
-                    if dias_restantes > 0:
-                        return jsonify({"status": "trial", "dias_restantes": dias_restantes})
-                    else:
-                        return jsonify({"status": "bloqueado"})
+            if not data_registro:
+                usuario["data_registro"] = datetime.now().strftime("%Y-%m-%d")
+                salvar_usuarios(dados)
+                return jsonify({"status": "trial", "dias_restantes": dias_trial})
 
             else:
-                return jsonify({"status": "bloqueado"})
+                inicio = datetime.strptime(data_registro, "%Y-%m-%d")
+                dias_passados = (datetime.now() - inicio).days
+                dias_restantes = max(0, dias_trial - dias_passados)
+
+                if dias_restantes > 0:
+                    return jsonify({"status": "trial", "dias_restantes": dias_restantes})
+                else:
+                    return jsonify({"status": "bloqueado"})
+
+        else:
+            return jsonify({"status": "bloqueado"})
 
     return jsonify({"erro": "Credenciais inválidas ou não encontradas"}), 403
 
