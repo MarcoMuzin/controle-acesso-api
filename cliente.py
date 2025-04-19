@@ -1,6 +1,6 @@
 import uuid
 import sys
-import requests  # Import necessário para chamadas HTTP
+import requests
 from datetime import datetime
 import tkinter as tk
 from tkinter import ttk
@@ -36,16 +36,17 @@ def enviar_id_para_api():
             resposta = requests.post(f"{API_URL}/registrar", json={"id": user_id})
             if resposta.status_code == 200:
                 print("✅ ID registrado com sucesso.")
-                return
+                return True
             elif resposta.status_code == 403:
                 print("⚠️ Limite de usuários atingido. Entre em contato com o suporte.")
-                return
+                return False
             else:
                 print(f"⚠️ Tentativa {i+1} falhou. Status: {resposta.status_code}")
         except Exception as e:
             print(f"❌ Tentativa {i+1} erro: {e}")
         time.sleep(3)
     print("❌ Todas as tentativas de registro falharam.")
+    return False
 
 # Verifica se o acesso está liberado na API
 def verificar_acesso_remoto(login, senha):
@@ -183,11 +184,14 @@ def criar_interface():
 
 # Execução principal
 if __name__ == "__main__":
-    enviar_id_para_api()
-    login = input("🔐 Digite seu login: ")
-    senha = input("🔐 Digite sua senha: ")
-    if verificar_acesso_remoto(login, senha):
-        criar_interface()
+    if enviar_id_para_api():
+        login = input("🔐 Digite seu login: ")
+        senha = input("🔐 Digite sua senha: ")
+        if verificar_acesso_remoto(login, senha):
+            criar_interface()
+        else:
+            print("⛔ Acesso negado. Encerrando.")
+            sys.exit()
     else:
-        print("⛔ Acesso negado. Encerrando.")
+        print("⛔ Falha ao registrar o ID. Encerrando.")
         sys.exit()
