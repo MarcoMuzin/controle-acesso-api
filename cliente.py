@@ -1,6 +1,6 @@
-import requests
 import uuid
 import sys
+import requests  # Import necessário para chamadas HTTP
 from datetime import datetime
 import tkinter as tk
 from tkinter import ttk
@@ -13,18 +13,22 @@ import os
 import pygame
 import numpy as np
 
+# Constantes
 IMAGENS_PASTA = "imagens"
 AUDIOS_PASTA = "audios"
 API_URL = "https://controle-acesso-api.onrender.com"
 
+# Listas de itens
 itens_ferir = ["Bless", "Claw", "Splinter"]
 joias = ["Gemstone", "Jewel"]
 selecionados = {}
 monitorando = False
 
+# Função para obter o ID único da máquina
 def obter_id_maquina():
     return str(uuid.getnode())
 
+# Envia o ID para registro na API
 def enviar_id_para_api():
     user_id = obter_id_maquina()
     for i in range(3):
@@ -43,6 +47,7 @@ def enviar_id_para_api():
         time.sleep(3)
     print("❌ Todas as tentativas de registro falharam.")
 
+# Verifica se o acesso está liberado na API
 def verificar_acesso_remoto(login, senha):
     user_id = obter_id_maquina()
     try:
@@ -70,16 +75,22 @@ def verificar_acesso_remoto(login, senha):
         print(f"❌ Erro de conexão com a API: {e}")
     return False
 
+# Toca o som correspondente ao item
 def tocar_som(item):
     caminho_audio = os.path.join(AUDIOS_PASTA, f"{item}.mp3")
     if os.path.exists(caminho_audio):
-        pygame.mixer.init()
-        pygame.mixer.music.load(caminho_audio)
-        pygame.mixer.music.play()
+        try:
+            pygame.mixer.init()
+            pygame.mixer.music.load(caminho_audio)
+            pygame.mixer.music.play()
+        except Exception as e:
+            print(f"Erro ao tocar som de {item}: {e}")
 
+# Procura o item na tela usando template matching
 def procurar_item(item):
     caminho_imagem = os.path.join(IMAGENS_PASTA, f"{item}.png")
     if not os.path.exists(caminho_imagem):
+        print(f"⚠️ Imagem {item}.png não encontrada.")
         return
     imagem = cv2.imread(caminho_imagem)
     screenshot = pyautogui.screenshot()
@@ -90,6 +101,7 @@ def procurar_item(item):
         print(f"🎯 {item} detectado!")
         tocar_som(item)
 
+# Loop de monitoramento
 def monitorar():
     global monitorando
     while monitorando:
@@ -98,19 +110,27 @@ def monitorar():
                 procurar_item(item)
         time.sleep(1)
 
+# Inicia o monitoramento
 def iniciar_monitoramento():
     global monitorando
-    monitorando = True
-    threading.Thread(target=monitorar, daemon=True).start()
+    if not monitorando:
+        monitorando = True
+        threading.Thread(target=monitorar, daemon=True).start()
+        print("▶️ Monitoramento iniciado.")
 
+# Para o monitoramento
 def parar_monitoramento():
     global monitorando
-    monitorando = False
+    if monitorando:
+        monitorando = False
+        print("⏹️ Monitoramento parado.")
 
+# Sai do programa
 def sair():
     parar_monitoramento()
     janela_principal.destroy()
 
+# Cria a interface gráfica
 def criar_interface():
     global janela_principal
     janela_principal = tk.Tk()
@@ -118,14 +138,16 @@ def criar_interface():
     janela_principal.geometry("600x400")
     janela_principal.configure(bg="#0d1117")
 
+    # Logo se existir
     try:
         imagem_fundo = Image.open("imagens/logo.png").resize((150, 150))
         imagem_tk = ImageTk.PhotoImage(imagem_fundo)
         tk.Label(janela_principal, image=imagem_tk, bg="#0d1117").place(relx=0.5, rely=0.08, anchor="n")
         janela_principal.image = imagem_tk
-    except:
-        pass
+    except Exception as e:
+        print(f"⚠️ Não foi possível carregar o logo: {e}")
 
+    # Estilo do notebook (abas)
     estilo = ttk.Style()
     estilo.theme_use("clam")
     estilo.configure("TNotebook", background="#0d1117", borderwidth=0)
@@ -137,6 +159,7 @@ def criar_interface():
     notebook.add(aba_monitoramento, text="Monitoramento")
     notebook.pack(expand=True, fill="both", padx=10, pady=10)
 
+    # Criação das sub-abas
     def criar_subaba(pai, titulo, itens):
         frame = ttk.Labelframe(pai, text=titulo, padding=10)
         frame.pack(fill="x", padx=5, pady=5)
@@ -149,6 +172,7 @@ def criar_interface():
     criar_subaba(aba_monitoramento, "Itens Ferir", itens_ferir)
     criar_subaba(aba_monitoramento, "Joias", joias)
 
+    # Botões
     frame_botoes = tk.Frame(janela_principal, bg="#0d1117")
     frame_botoes.pack(pady=10)
     tk.Button(frame_botoes, text="Iniciar", command=iniciar_monitoramento, bg="#238636", fg="white", width=10).pack(side="left", padx=5)

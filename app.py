@@ -16,6 +16,10 @@ def salvar_usuarios(dados):
     with open(ARQUIVO_USUARIOS, "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=4, ensure_ascii=False)
 
+@app.route("/")
+def home():
+    return "✅ API de Controle de Acesso está funcionando!", 200
+
 @app.route("/registrar", methods=["POST"])
 def registrar_id():
     data = request.get_json()
@@ -83,7 +87,7 @@ def verificar_acesso():
 
     return jsonify({"erro": "Credenciais inválidas ou não encontradas"}), 403
 
-@app.route("/saúdez")  # rota para health check da Render
+@app.route("/saúdez")
 def saudez():
     return "OK", 200
 
