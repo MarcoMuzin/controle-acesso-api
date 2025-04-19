@@ -5,14 +5,17 @@ from datetime import datetime
 
 app = Flask(__name__)
 ARQUIVO_USUARIOS = "users.json"
+LIMITE_USUARIOS = 5  # Definindo um limite máximo de usuários
 
 def carregar_usuarios():
+    """Carrega os dados dos usuários do arquivo JSON."""
     if not os.path.exists(ARQUIVO_USUARIOS):
         return {"usuarios": []}
-    with open(ARQUIVO_USUARIOS, "r") as f:
+    with open(ARQUIVO_USUARIOS, "r", encoding="utf-8") as f:
         return json.load(f)
 
 def salvar_usuarios(dados):
+    """Salva os dados dos usuários no arquivo JSON."""
     with open(ARQUIVO_USUARIOS, "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=4, ensure_ascii=False)
 
@@ -24,6 +27,7 @@ def home():
 def registrar_id():
     data = request.get_json()
     user_id = data.get("id")
+    
     if not user_id:
         return jsonify({"erro": "ID não fornecido"}), 400
 
@@ -32,17 +36,20 @@ def registrar_id():
 
     print("🔍 Usuários carregados:", usuarios)
 
+    # Verificando se o ID já está registrado
     for usuario in usuarios:
         if usuario.get("id") == user_id:
             return jsonify({"mensagem": "ID já registrado"}), 200
 
-    for usuario in usuarios:
-        if not usuario.get("id"):
-            usuario["id"] = user_id
-            salvar_usuarios({"usuarios": usuarios})
-            return jsonify({"mensagem": "ID registrado com sucesso"}), 200
+    # Verificando se não ultrapassamos o limite de usuários
+    if len(usuarios) >= LIMITE_USUARIOS:
+        return jsonify({"erro": "Limite de usuários atingido"}), 403
 
-    return jsonify({"erro": "Limite de usuários atingido"}), 403
+    # Registrando o novo usuário
+    usuarios.append({"id": user_id})
+    salvar_usuarios({"usuarios": usuarios})
+
+    return jsonify({"mensagem": "ID registrado com sucesso"}), 200
 
 @app.route("/verificar", methods=["GET"])
 def verificar_acesso():
@@ -87,8 +94,8 @@ def verificar_acesso():
 
     return jsonify({"erro": "Credenciais inválidas ou não encontradas"}), 403
 
-@app.route("/saúdez")
-def saudez():
+@app.route("/saude")
+def saude():
     return "OK", 200
 
 if __name__ == "__main__":
